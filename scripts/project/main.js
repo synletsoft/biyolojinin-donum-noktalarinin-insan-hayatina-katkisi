@@ -2,7 +2,7 @@ const GAME_WIDTH = 1920;
 const GAME_HEIGHT = 1080;
 const CELL_SIZE = 64;
 const BOARD_INSET = 6;
-const BOARD_SIDE_GUTTER = 120;
+const BOARD_SIDE_GUTTER = 300;
 
 const WORDS = [
 	{
@@ -380,7 +380,12 @@ function renderBoard(state)
 		letter.setAttribute("role", "button");
 		letter.setAttribute("tabindex", "0");
 		letter.setAttribute("aria-label", "Bulmaca harfi");
-		letter.addEventListener("pointerdown", () => activateFromCell(state, wrap.dataset.key));
+		letter.addEventListener("pointerdown", () =>
+		{
+			showKeyboard(state);
+			activateFromCell(state, wrap.dataset.key);
+			revealSelectedCell(state);
+		});
 		letter.addEventListener("keydown", e =>
 		{
 			if (e.key === "Enter" || e.key === " ")
@@ -414,19 +419,34 @@ function renderSecretBoxes(state)
 
 function renderKeyboard(state)
 {
-	const rows = [
-		["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "Ğ", "Ü"],
-		["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ş", "İ"],
-		["Z", "X", "C", "V", "B", "N", "M", "Ö", "Ç"]
+	const leftRows = [
+		["Q", "W", "E", "R", "T", "Y"],
+		["A", "S", "D", "F", "G", "H"],
+		["Z", "X", "C", "V", "B"]
 	];
-
-	state.keyboard.innerHTML = rows.map(row => `
+	const rightRows = [
+		["U", "I", "O", "P", "Ğ", "Ü"],
+		["J", "K", "L", "Ş", "İ"],
+		["N", "M", "Ö", "Ç"]
+	];
+	const renderRows = rows => rows.map(row => `
 		<div class="bio-key-row">
 			${row.map(letter => `<button class="bio-key" type="button" data-letter="${letter}">${letter}</button>`).join("")}
 		</div>
-	`).join("") + `
-		<div class="bio-key-row bio-key-row-bottom">
-			<button class="bio-key bio-key-wide" type="button" data-action="backspace">Sil</button>
+	`).join("");
+
+	state.keyboard.innerHTML = `
+		<div class="bio-key-half bio-key-half-left">
+			${renderRows(leftRows)}
+			<div class="bio-key-row bio-key-row-bottom">
+				<button class="bio-key bio-key-wide" type="button" data-action="backspace">Sil</button>
+			</div>
+		</div>
+		<div class="bio-key-half bio-key-half-right">
+			${renderRows(rightRows)}
+			<div class="bio-key-row bio-key-row-bottom">
+				<button class="bio-key bio-key-wide" type="button" data-action="enter">Enter</button>
+			</div>
 		</div>
 	`;
 
@@ -442,6 +462,8 @@ function renderKeyboard(state)
 			enterLetter(state, key.dataset.letter);
 		else if (key.dataset.action === "backspace")
 			deleteLetter(state);
+		else if (key.dataset.action === "enter")
+			hideKeyboard(state);
 	});
 }
 
@@ -512,6 +534,23 @@ function bindZoomControls(state)
 			setBoardZoom(state, state.zoom + delta);
 		});
 	}
+}
+
+function showKeyboard(state)
+{
+	state.keyboard.classList.add("is-open");
+
+	if (state.zoom < 1)
+	{
+		state.manualZoom = true;
+		state.zoom = 1;
+		updateBoardZoom(state);
+	}
+}
+
+function hideKeyboard(state)
+{
+	state.keyboard.classList.remove("is-open");
 }
 
 function setBoardZoom(state, zoom)
@@ -711,6 +750,7 @@ function enterLetter(state, letter)
 	state.mode = "play";
 	renderState(state);
 	focusNeighbor(state, state.selectedKey, 1);
+	revealSelectedCell(state);
 }
 
 function deleteLetter(state)
@@ -722,6 +762,7 @@ function deleteLetter(state)
 	state.mode = "play";
 	renderState(state);
 	focusNeighbor(state, key, -1);
+	revealSelectedCell(state);
 }
 
 function onPhysicalKeydown(state, event)
@@ -733,6 +774,13 @@ function onPhysicalKeydown(state, event)
 	{
 		event.preventDefault();
 		deleteLetter(state);
+		return;
+	}
+
+	if (event.key === "Enter")
+	{
+		event.preventDefault();
+		hideKeyboard(state);
 		return;
 	}
 
@@ -774,6 +822,54 @@ function focusNeighbor(state, key, offset, clear)
 	state.selectedKey = nextKey;
 	renderState(state);
 	updateSecret(state);
+}
+
+function revealSelectedCell(state)
+{
+	const target = state.inputs.get(state.selectedKey);
+
+	if (!target)
+		return;
+
+	requestAnimationFrame(() =>
+	{
+		const cellRect = target.closest(".bio-cell").getBoundingClientRect();
+		const viewportRect = state.viewport.getBoundingClientRect();
+		const keyboardPanels = state.keyboard.classList.contains("is-open")
+			? [...state.keyboard.querySelectorAll(".bio-key-half")].map(panel => panel.getBoundingClientRect())
+			: [];
+		const blockingPanel = keyboardPanels.find(panel =>
+			cellRect.right > panel.left &&
+			cellRect.left < panel.right &&
+			cellRect.bottom > panel.top &&
+			cellRect.top < panel.bottom
+		);
+		const visibleBottom = blockingPanel
+			? Math.min(viewportRect.bottom, blockingPanel.top - 18)
+			: viewportRect.bottom;
+		const margin = 34;
+		let dx = 0;
+		let dy = 0;
+
+		if (cellRect.left < viewportRect.left + margin)
+			dx = cellRect.left - viewportRect.left - margin;
+		else if (cellRect.right > viewportRect.right - margin)
+			dx = cellRect.right - viewportRect.right + margin;
+
+		if (cellRect.top < viewportRect.top + margin)
+			dy = cellRect.top - viewportRect.top - margin;
+		else if (cellRect.bottom > visibleBottom - margin)
+			dy = cellRect.bottom - visibleBottom + margin;
+
+		if (dx || dy)
+		{
+			state.viewport.scrollBy({
+				left: dx,
+				top: dy,
+				behavior: "smooth"
+			});
+		}
+	});
 }
 
 function focusActiveWord(state)
@@ -1238,42 +1334,77 @@ function injectStyles()
 			position: fixed;
 			left: 0;
 			right: 0;
-			bottom: 0;
+			bottom: 10px;
 			z-index: 2147483647;
 			display: none;
-			padding: 8px 10px 12px;
-			background: rgba(245, 247, 250, 0.98);
-			box-shadow: 0 -10px 26px rgba(31, 40, 52, 0.22);
-			pointer-events: auto;
+			justify-content: space-between;
+			align-items: flex-end;
+			gap: 18px;
+			padding: 0 18px;
+			background: transparent;
+			box-shadow: none;
+			pointer-events: none;
 			touch-action: manipulation;
+		}
+
+		.bio-key-half {
+			padding: 8px 10px 10px;
+			border-radius: 18px;
+			background: rgba(245, 247, 250, 0.72);
+			box-shadow: 0 10px 24px rgba(31, 40, 52, 0.14);
+			pointer-events: auto;
+			backdrop-filter: blur(4px);
 		}
 
 		.bio-key-row {
 			display: flex;
 			justify-content: center;
-			gap: 6px;
-			margin-top: 6px;
+			gap: 5px;
+			margin-top: 5px;
 		}
 
 		.bio-key {
-			min-width: 42px;
-			height: 48px;
+			min-width: 44px;
+			height: 46px;
 			border: 0;
 			border-radius: 9px;
 			background: #ffffff;
 			box-shadow: 0 2px 5px rgba(25, 35, 48, 0.22);
 			color: #111820;
-			font: 800 25px/1 Calibri, Arial, sans-serif;
+			font: 800 24px/1 Calibri, Arial, sans-serif;
 		}
 
 		.bio-key-wide {
-			min-width: 150px;
-			font-size: 22px;
+			min-width: 134px;
+			font-size: 21px;
 		}
 
 		@media (pointer: coarse), (max-width: 900px) {
+			.bio-keyboard.is-open {
+				display: flex;
+			}
+		}
+
+		@media (max-width: 760px) {
 			.bio-keyboard {
-				display: block;
+				padding: 0 8px;
+				gap: 8px;
+			}
+
+			.bio-key-half {
+				padding: 6px;
+			}
+
+			.bio-key {
+				min-width: 34px;
+				height: 40px;
+				font-size: 20px;
+				border-radius: 8px;
+			}
+
+			.bio-key-wide {
+				min-width: 104px;
+				font-size: 18px;
 			}
 		}
 	`;
