@@ -138,7 +138,8 @@ function createCrossword()
 		zoom: 1,
 		manualZoom: false,
 		boardCols: 0,
-		boardRows: 0
+		boardRows: 0,
+		keyboardDrag: null
 	};
 
 	for (const item of SECRET_CELLS)
@@ -210,6 +211,7 @@ function createCrossword()
 	renderBoard(state);
 	renderSecretBoxes(state);
 	renderKeyboard(state);
+	bindKeyboardDrag(state);
 	bindBoardPan(state);
 	bindZoomControls(state);
 	updateScale(state);
@@ -283,7 +285,11 @@ function createCrossword()
 
 	window.bioCrosswordKeyHandler = event => onPhysicalKeydown(state, event);
 	document.addEventListener("keydown", window.bioCrosswordKeyHandler);
-	window.addEventListener("resize", () => updateScale(state), { passive: true });
+	window.addEventListener("resize", () =>
+	{
+		updateScale(state);
+		clampKeyboardPanels(state);
+	}, { passive: true });
 }
 
 function removeCrossword()
@@ -429,6 +435,11 @@ function renderKeyboard(state)
 		["J", "K", "L", "Ş", "İ"],
 		["N", "M", "Ö", "Ç"]
 	];
+	const fullRows = [
+		[...leftRows[0], ...rightRows[0]],
+		[...leftRows[1], ...rightRows[1]],
+		[...leftRows[2], ...rightRows[2]]
+	];
 	const renderRows = rows => rows.map(row => `
 		<div class="bio-key-row">
 			${row.map(letter => `<button class="bio-key" type="button" data-letter="${letter}">${letter}</button>`).join("")}
@@ -436,6 +447,13 @@ function renderKeyboard(state)
 	`).join("");
 
 	state.keyboard.innerHTML = `
+		<div class="bio-keyboard-unified">
+			${renderRows(fullRows)}
+			<div class="bio-key-row bio-key-row-bottom bio-key-row-actions">
+				<button class="bio-key bio-key-wide" type="button" data-action="backspace">Sil</button>
+				<button class="bio-key bio-key-wide" type="button" data-action="enter">Enter</button>
+			</div>
+		</div>
 		<div class="bio-key-half bio-key-half-left">
 			${renderRows(leftRows)}
 			<div class="bio-key-row bio-key-row-bottom">
@@ -450,7 +468,6 @@ function renderKeyboard(state)
 		</div>
 	`;
 
-	state.keyboard.addEventListener("pointerdown", event => event.preventDefault());
 	state.keyboard.addEventListener("click", event =>
 	{
 		const key = event.target.closest(".bio-key");
@@ -464,6 +481,131 @@ function renderKeyboard(state)
 			deleteLetter(state);
 		else if (key.dataset.action === "enter")
 			hideKeyboard(state);
+	});
+}
+
+function bindKeyboardDrag(state)
+{
+	const clearPressedKeys = () =>
+	{
+		for (const key of state.keyboard.querySelectorAll(".bio-key.is-pressed"))
+			key.classList.remove("is-pressed");
+	};
+	const finishDrag = event =>
+	{
+		clearPressedKeys();
+
+		if (!state.keyboardDrag)
+			return;
+
+		if (event.pointerId !== undefined && event.pointerId !== state.keyboardDrag.pointerId)
+			return;
+
+		state.keyboardDrag.panel.classList.remove("is-dragging");
+		state.keyboardDrag = null;
+	};
+
+	state.keyboard.addEventListener("pointerdown", event =>
+	{
+		const key = event.target.closest(".bio-key");
+
+		if (key)
+		{
+			key.classList.add("is-pressed");
+			return;
+		}
+
+		const panel = event.target.closest(".bio-key-half");
+
+		if (!panel)
+			return;
+
+		event.preventDefault();
+		const offset = getKeyboardPanelOffset(panel);
+		state.keyboardDrag = {
+			panel,
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			offsetX: offset.x,
+			offsetY: offset.y
+		};
+		panel.classList.add("is-dragging");
+		panel.setPointerCapture?.(event.pointerId);
+	});
+
+	state.keyboard.addEventListener("pointermove", event =>
+	{
+		const drag = state.keyboardDrag;
+
+		if (!drag || event.pointerId !== drag.pointerId)
+			return;
+
+		event.preventDefault();
+		setKeyboardPanelOffset(
+			drag.panel,
+			drag.offsetX + event.clientX - drag.startX,
+			drag.offsetY + event.clientY - drag.startY
+		);
+	});
+
+	state.keyboard.addEventListener("pointerup", finishDrag);
+	state.keyboard.addEventListener("pointercancel", finishDrag);
+	state.keyboard.addEventListener("lostpointercapture", finishDrag);
+	state.keyboard.addEventListener("pointerleave", clearPressedKeys);
+}
+
+function getKeyboardPanelOffset(panel)
+{
+	return {
+		x: Number(panel.dataset.dragX || 0),
+		y: Number(panel.dataset.dragY || 0)
+	};
+}
+
+function setKeyboardPanelOffset(panel, x, y)
+{
+	const current = getKeyboardPanelOffset(panel);
+	const rect = panel.getBoundingClientRect();
+	const margin = 8;
+
+	if (!rect.width || !rect.height)
+		return;
+
+	let nextX = x;
+	let nextY = y;
+	let nextLeft = rect.left + nextX - current.x;
+	let nextRight = rect.right + nextX - current.x;
+	let nextTop = rect.top + nextY - current.y;
+	let nextBottom = rect.bottom + nextY - current.y;
+
+	if (nextLeft < margin)
+		nextX += margin - nextLeft;
+	if (nextRight > window.innerWidth - margin)
+		nextX -= nextRight - (window.innerWidth - margin);
+	if (nextTop < margin)
+		nextY += margin - nextTop;
+	if (nextBottom > window.innerHeight - margin)
+		nextY -= nextBottom - (window.innerHeight - margin);
+
+	panel.dataset.dragX = String(Math.round(nextX));
+	panel.dataset.dragY = String(Math.round(nextY));
+	panel.style.setProperty("--keyboard-drag-x", `${Math.round(nextX)}px`);
+	panel.style.setProperty("--keyboard-drag-y", `${Math.round(nextY)}px`);
+}
+
+function clampKeyboardPanels(state)
+{
+	if (!state.keyboard)
+		return;
+
+	requestAnimationFrame(() =>
+	{
+		for (const panel of state.keyboard.querySelectorAll(".bio-key-half"))
+		{
+			const offset = getKeyboardPanelOffset(panel);
+			setKeyboardPanelOffset(panel, offset.x, offset.y);
+		}
 	});
 }
 
@@ -539,6 +681,7 @@ function bindZoomControls(state)
 function showKeyboard(state)
 {
 	state.keyboard.classList.add("is-open");
+	clampKeyboardPanels(state);
 
 	if (state.zoom < 1)
 	{
@@ -836,7 +979,9 @@ function revealSelectedCell(state)
 		const cellRect = target.closest(".bio-cell").getBoundingClientRect();
 		const viewportRect = state.viewport.getBoundingClientRect();
 		const keyboardPanels = state.keyboard.classList.contains("is-open")
-			? [...state.keyboard.querySelectorAll(".bio-key-half")].map(panel => panel.getBoundingClientRect())
+			? [...state.keyboard.querySelectorAll(".bio-key-half, .bio-keyboard-unified")]
+				.map(panel => panel.getBoundingClientRect())
+				.filter(panel => panel.width && panel.height)
 			: [];
 		const blockingPanel = keyboardPanels.find(panel =>
 			cellRect.right > panel.left &&
@@ -1334,49 +1479,78 @@ function injectStyles()
 			position: fixed;
 			left: 0;
 			right: 0;
-			bottom: 10px;
+			bottom: max(8px, env(safe-area-inset-bottom));
 			z-index: 2147483647;
 			display: none;
 			justify-content: space-between;
 			align-items: flex-end;
 			gap: 18px;
-			padding: 0 18px;
+			padding: 0 clamp(8px, 4vw, 34px);
 			background: transparent;
 			box-shadow: none;
+			box-sizing: border-box;
 			pointer-events: none;
-			touch-action: manipulation;
+			touch-action: none;
 		}
 
-		.bio-key-half {
-			padding: 8px 10px 10px;
-			border-radius: 18px;
+		.bio-keyboard-unified {
+			display: none;
+		}
+
+		.bio-key-half,
+		.bio-keyboard-unified {
+			padding: 7px 9px 9px;
+			border-radius: 16px;
 			background: rgba(245, 247, 250, 0.72);
 			box-shadow: 0 10px 24px rgba(31, 40, 52, 0.14);
 			pointer-events: auto;
 			backdrop-filter: blur(4px);
+			box-sizing: border-box;
+			user-select: none;
+		}
+
+		.bio-key-half {
+			cursor: grab;
+			touch-action: none;
+			transform: translate(var(--keyboard-drag-x, 0px), var(--keyboard-drag-y, 0px));
+		}
+
+		.bio-key-half.is-dragging {
+			cursor: grabbing;
 		}
 
 		.bio-key-row {
 			display: flex;
 			justify-content: center;
-			gap: 5px;
-			margin-top: 5px;
+			gap: 4px;
+			margin-top: 4px;
 		}
 
 		.bio-key {
-			min-width: 44px;
-			height: 46px;
+			min-width: 37px;
+			width: 37px;
+			height: 39px;
 			border: 0;
-			border-radius: 9px;
+			border-radius: 8px;
 			background: #ffffff;
 			box-shadow: 0 2px 5px rgba(25, 35, 48, 0.22);
 			color: #111820;
-			font: 800 24px/1 Calibri, Arial, sans-serif;
+			font: 800 21px/1 Calibri, Arial, sans-serif;
+			touch-action: manipulation;
+			transition: background-color 80ms ease, color 80ms ease, transform 80ms ease;
+		}
+
+		.bio-key:active,
+		.bio-key.is-pressed {
+			background: #f28c28;
+			color: #ffffff;
+			transform: translateY(1px);
 		}
 
 		.bio-key-wide {
-			min-width: 134px;
-			font-size: 21px;
+			min-width: 114px;
+			width: 114px;
+			font-size: 19px;
 		}
 
 		@media (pointer: coarse), (max-width: 900px) {
@@ -1385,26 +1559,63 @@ function injectStyles()
 			}
 		}
 
-		@media (max-width: 760px) {
+		@media (orientation: landscape) and (pointer: coarse), (max-width: 900px) and (orientation: landscape) {
 			.bio-keyboard {
-				padding: 0 8px;
-				gap: 8px;
+				gap: clamp(14px, 12vw, 220px);
+				padding: 0 clamp(8px, 5vw, 48px);
 			}
 
 			.bio-key-half {
+				flex: 0 0 auto;
+			}
+		}
+
+		@media (orientation: portrait), (max-width: 760px) {
+			.bio-keyboard {
+				justify-content: center;
+				gap: 0;
+				padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
+			}
+
+			.bio-key-half {
+				display: none;
+			}
+
+			.bio-keyboard-unified {
+				display: block;
+				width: min(100%, calc(100vw - 16px));
 				padding: 6px;
 			}
 
-			.bio-key {
-				min-width: 34px;
-				height: 40px;
-				font-size: 20px;
+			.bio-keyboard-unified .bio-key-row {
+				display: grid;
+				grid-auto-flow: column;
+				grid-auto-columns: minmax(0, 1fr);
+				gap: 4px;
+				margin-top: 4px;
+			}
+
+			.bio-keyboard-unified .bio-key-row-actions {
+				grid-auto-flow: initial;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				width: min(360px, 72vw);
+				margin-left: auto;
+				margin-right: auto;
+			}
+
+			.bio-keyboard-unified .bio-key {
+				min-width: 0;
+				width: 100%;
+				height: clamp(34px, 9vw, 42px);
+				padding: 0;
+				font-size: clamp(14px, 4.4vw, 20px);
 				border-radius: 8px;
 			}
 
-			.bio-key-wide {
-				min-width: 104px;
-				font-size: 18px;
+			.bio-keyboard-unified .bio-key-wide {
+				min-width: 0;
+				width: 100%;
+				font-size: clamp(16px, 4.4vw, 19px);
 			}
 		}
 	`;
