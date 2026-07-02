@@ -164,11 +164,11 @@ function createCrossword()
 					<section class="bio-board-canvas">
 						<section class="bio-board" aria-label="Biyoloji bulmacası"></section>
 					</section>
-					<div class="bio-zoom-controls" aria-label="Cevap alanı yakınlaştırma">
-						<button class="bio-zoom" type="button" data-zoom="in" aria-label="Yakınlaştır">+</button>
-						<button class="bio-zoom" type="button" data-zoom="out" aria-label="Uzaklaştır">-</button>
-					</div>
 				</section>
+				<div class="bio-zoom-controls" aria-label="Cevap alanı yakınlaştırma">
+					<button class="bio-zoom" type="button" data-zoom="in" aria-label="Yakınlaştır">+</button>
+					<button class="bio-zoom" type="button" data-zoom="out" aria-label="Uzaklaştır">-</button>
+				</div>
 			</main>
 			<section class="bio-secret" aria-label="Şifre">
 				<strong>Şifre</strong>
@@ -1095,7 +1095,7 @@ function injectStyles()
 			left: 220px;
 			top: 128px;
 			width: 1480px;
-			height: 124px;
+			height: 144px;
 			display: grid;
 			grid-template-columns: 76px 1fr 76px;
 			gap: 14px;
@@ -1118,9 +1118,9 @@ function injectStyles()
 		}
 
 		.bio-question-text {
-			font-size: 35px;
-			font-weight: 400;
-			line-height: 1.12;
+			font-size: 40px;
+			font-weight: 500;
+			line-height: 1.08;
 		}
 
 		.bio-question-text strong {
@@ -1434,25 +1434,30 @@ function injectStyles()
 
 		.bio-zoom-controls {
 			position: absolute;
-			right: 14px;
-			bottom: 14px;
+			right: 18px;
+			bottom: 18px;
 			display: flex;
-			gap: 8px;
-			padding: 8px;
+			gap: 10px;
+			padding: 10px;
+			border-radius: 999px;
+			background: rgba(255, 255, 255, 0.08);
+			box-shadow: 0 6px 18px rgba(22, 31, 43, 0.12);
 			pointer-events: auto;
 			z-index: 30;
 		}
 
 		.bio-zoom {
-			width: 44px;
-			height: 44px;
+			width: 57px;
+			height: 57px;
 			border: 0;
 			border-radius: 50%;
 			cursor: pointer;
 			background: rgba(255, 255, 255, 0.92);
-			box-shadow: 0 5px 14px rgba(30, 38, 48, 0.22);
+			box-shadow:
+				0 5px 14px rgba(30, 38, 48, 0.18),
+				0 1px 2px rgba(30, 38, 48, 0.08);
 			color: #111820;
-			font: 900 26px/1 Calibri, Arial, sans-serif;
+			font: 900 34px/1 Calibri, Arial, sans-serif;
 		}
 
 		.bio-hint {
