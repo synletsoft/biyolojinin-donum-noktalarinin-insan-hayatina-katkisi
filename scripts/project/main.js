@@ -845,12 +845,11 @@ function renderState(state)
 
 	if (state.mode === "result")
 	{
-		const correctCount = [...state.inputs].filter(([key]) => normalizeLetter(state.values.get(key) || "") === state.cells.get(key).letter).length;
-		state.feedback.textContent = `${correctCount}/${state.inputs.size} harf doğru`;
+		state.feedback.textContent = "";
 	}
 	else if (state.mode === "hint")
 	{
-		state.feedback.textContent = "Harf kenarları güncellendi";
+		state.feedback.textContent = "";
 	}
 }
 
@@ -1092,9 +1091,9 @@ function injectStyles()
 
 		.bio-topbar {
 			position: absolute;
-			left: 220px;
-			top: 128px;
-			width: 1480px;
+			left: 16px;
+			top: 16px;
+			width: 1420px;
 			height: 144px;
 			display: grid;
 			grid-template-columns: 76px 1fr 76px;
@@ -1118,8 +1117,8 @@ function injectStyles()
 		}
 
 		.bio-question-text {
-			font-size: 40px;
-			font-weight: 500;
+			font-size: 38px;
+			font-weight: 700;
 			line-height: 1.08;
 		}
 
@@ -1158,10 +1157,10 @@ function injectStyles()
 
 		.bio-main {
 			position: absolute;
-			left: 220px;
-			right: 220px;
-			top: 330px;
-			height: 700px;
+			left: 150px;
+			right: 170px;
+			top: 190px;
+			height: 840px;
 			display: block;
 		}
 
@@ -1369,13 +1368,7 @@ function injectStyles()
 		}
 
 		.bio-feedback {
-			min-height: 32px;
-			text-align: center;
-			font-size: 18px;
-			font-weight: 800;
-			color: #315c85;
-			width: 220px;
-			margin-left: -124px;
+			display: none;
 		}
 
 		.bio-action {
